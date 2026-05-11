@@ -1,0 +1,27 @@
+# PrayerLock Requirements
+# Install with: pip install -r requirements.txt
+
+# Core UI
+PyQt6>=6.6.0
+PyQt6-Qt6>=6.6.0
+PyQt6-sip>=13.6.0
+
+# Windows service & API
+pywin32>=306
+
+# Timezone support
+pytz>=2023.3
+requests>=2.31.0
+
+# Security & encryption
+cryptography>=41.0.0
+argon2-cffi>=23.1.0
+
+# Process monitoring
+psutil>=5.9.0
+
+# Build tool (for packaging)
+pyinstaller>=6.0.0
+
+# Prayer times calculation
+adhan
