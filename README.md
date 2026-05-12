@@ -32,7 +32,7 @@ The password is not meant to be a real security feature. It is mainly for child 
 ### Main Application
 
 <p align="center">
-  <img src="assets/App.png" width="900">
+  <img src="assets/App-v2.png" width="900">
 </p>
 
 The main configuration window used to manage prayer timings, reminders, lock duration, and application settings.
@@ -42,7 +42,7 @@ The main configuration window used to manage prayer timings, reminders, lock dur
 ### Warning Overlay
 
 <p align="center">
-  <img src="assets/Overlay.png" width="700">
+  <img src="assets/Overlay-v2.png" width="700">
 </p>
 
 A lightweight always-on-top overlay displayed shortly before the screen lock activates.
@@ -52,7 +52,7 @@ A lightweight always-on-top overlay displayed shortly before the screen lock act
 ### Lock Screen
 
 <p align="center">
-  <img src="assets/LockScreen.png" width="900">
+  <img src="assets/LockScreen-v2.png" width="900">
 </p>
 
 The fullscreen prayer lock screen shown during prayer time, including countdown timer and unlock controls.
