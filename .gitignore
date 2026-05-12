@@ -1,0 +1,40 @@
+# Python cache / local runtime
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local secrets / machine config
+.env
+.env.*
+*.log
+overlay_debug.log
+config.json
+*.local.json
+
+# PyInstaller output
+build/
+dist/
+*.manifest
+*.spec.bak
+
+# Inno Setup output / release binaries
+Output/
+
+# Editor / OS clutter
+.idea/
+.vscode/
+*.swp
+*.swo
+Thumbs.db
+Desktop.ini
+
+# Local helper scripts
+release_push.bat

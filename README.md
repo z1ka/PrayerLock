@@ -1,31 +1,29 @@
 # PrayerLock
 
-PrayerLock is a Windows application that reminds users before Athan and temporarily locks the computer during prayer time to encourage consistency and reduce distractions.
+PrayerLock is a Windows app that reminds users before Athan and temporarily locks the computer during prayer time.
 
 ---
 
 ## Features
 
-- Automatic location detection by IP
-- Manual city or coordinates fallback
-- Prayer times fetched from Aladhan API
-- Offline prayer time calculation fallback
+- Auto-selects country/city as a starting point, with manual correction if it is wrong
+- Built-in Gulf and Middle East country/city list
+- Prayer times from Aladhan, with offline `adhan` fallback
+- Country-aware calculation method selection
 - Configurable reminder before Athan
-- Always-on-top warning overlay before lock
-- Fullscreen Arabic lock screen with:
-  - Quran verse
-  - Countdown timer
-  - Prayer information
-- Master password support:
-  - Skip upcoming lock
-  - Unlock early if needed
-- System tray application with:
-  - Today's prayer schedule
-  - Test Overlay
-  - Test Lock
-  - Skip next lock
-- Background Windows service for lock enforcement
+- Small always-on-top warning overlay
+- Arabic lock screen with Quran verse and countdown
+- Master password for:
+  - unlocking early
+  - skipping the next lock
+  - skipping selected prayers for today
+  - quitting the tray app
+  - uninstalling
+- Tray app with today's schedule, test overlay, test lock, and skip controls
+- Windows service for background lock enforcement
 - Starts automatically for all Windows users after installation
+
+The password is not meant to be a real security feature. It is mainly for child enforcement and habit-building: helping the user stop games, calls, or work when it is time to pray.
 
 ---
 
@@ -63,27 +61,50 @@ The fullscreen prayer lock screen shown during prayer time, including countdown 
 
 ## Installation
 
-1. Download `PrayerLock-Setup.exe`
-2. Right-click the installer
-3. Select **Run as administrator**
-4. Complete the setup wizard
-5. Configure:
-   - City or location
-   - Reminder timing
-   - Lock timing
-   - Master password
-6. Leave the tray application running
+1. Download `PrayerLock-Setup.exe` under the installer folder in the repo.
+2. Right-click the installer.
+3. Select **Run as administrator**.
+4. Complete the setup wizard.
+5. Choose the country, city, reminder timing, lock timing, and master password.
+6. Leave the tray app running.
 
-After installation, you can test the application from the tray menu using:
+After installation, use the tray menu to test:
 
 - **Test Overlay**
 - **Test Lock**
 
 ---
 
+## Skipping Today
+
+From the tray app, choose **Skip Specific Prayers Today**.
+
+Select the prayers to skip, enter the master password, and PrayerLock will skip only those prayers for the rest of the day. The next day works normally again.
+
+---
+
 ## Uninstall
 
-Remove PrayerLock using:
+Use:
 
 ```powershell
 Settings > Apps > PrayerLock > Uninstall
+```
+
+The uninstaller asks for the master password.
+
+---
+
+## Build
+
+```powershell
+pip install -r requirements.txt
+pyinstaller --clean PrayerLock.spec
+iscc PrayerLock.iss
+```
+
+The installer is created at:
+
+```text
+installer\PrayerLock-Setup.exe
+```

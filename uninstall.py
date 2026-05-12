@@ -6,6 +6,7 @@ import sys
 import ctypes
 import subprocess
 import shutil
+import getpass
 from pathlib import Path
 
 # Flat structure — ensure the app directory is on the import path.
@@ -45,7 +46,7 @@ def main():
 
     # Verify with password
     print("\nFor security, please enter the master password:")
-    pwd = input("Password: ").strip()
+    pwd = getpass.getpass("Password: ")
 
     try:
         from config_manager import ConfigManager   # flat import — fixed from config.manager
@@ -55,7 +56,8 @@ def main():
             sys.exit(1)
     except Exception as e:
         print(f"Could not verify password: {e}")
-        print("Proceeding anyway (config may not exist)...")
+        print("Uninstall aborted.")
+        sys.exit(1)
 
     print("\nUninstalling...")
 

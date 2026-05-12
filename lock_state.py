@@ -33,7 +33,8 @@ def _load_state() -> dict:
     try:
         if _UNLOCK_FILE.exists():
             with open(_UNLOCK_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                state = json.load(f)
+                return state if isinstance(state, dict) else {}
     except Exception:
         pass
     return {}
@@ -50,21 +51,51 @@ def _save_state(state: dict) -> None:
 def mark_intentionally_unlocked(prayer_name: str, seconds: int) -> None:
     """Remember that the current lock window was unlocked by password."""
     prayer = normalize_prayer_name(prayer_name)
-    until = datetime.datetime.now() + datetime.timedelta(seconds=max(1, seconds) + 5)
+    now = datetime.datetime.now()
+    until = now + datetime.timedelta(seconds=max(1, seconds) + 5)
     state = _load_state()
-    state[prayer] = until.isoformat(timespec="seconds")
+    state[prayer] = {
+        "until": until.isoformat(timespec="seconds"),
+        "date": now.date().isoformat(),
+    }
     _save_state(state)
+
+
+def _entry_until(raw):
+    if isinstance(raw, dict):
+        raw = raw.get("until")
+    if not raw:
+        return None
+    try:
+        return datetime.datetime.fromisoformat(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _entry_date(raw):
+    if isinstance(raw, dict) and raw.get("date"):
+        try:
+            return datetime.date.fromisoformat(raw["date"])
+        except (TypeError, ValueError):
+            return None
+    until = _entry_until(raw)
+    return until.date() if until else None
 
 
 def is_intentionally_unlocked(prayer_name: str, now=None) -> bool:
     prayer = normalize_prayer_name(prayer_name)
     now = now or datetime.datetime.now()
     state = _load_state()
-    raw_until = state.get(prayer)
-    if not raw_until:
-        return False
-    try:
-        until = datetime.datetime.fromisoformat(raw_until)
-    except ValueError:
+    until = _entry_until(state.get(prayer))
+    if until is None:
         return False
     return now < until
+
+
+def was_intentionally_unlocked_today(prayer_name: str, now=None) -> bool:
+    """Return True for dashboard display even after the lock window expires."""
+    prayer = normalize_prayer_name(prayer_name)
+    now = now or datetime.datetime.now()
+    state = _load_state()
+    marked_date = _entry_date(state.get(prayer))
+    return marked_date == now.date()

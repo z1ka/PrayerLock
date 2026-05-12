@@ -13,7 +13,8 @@ from PyQt6.QtWidgets import (
     QApplication, QSystemTrayIcon, QMenu, QWidget,
     QVBoxLayout, QHBoxLayout, QLabel, QFrame, QPushButton,
     QDialog, QTableWidget, QTableWidgetItem, QHeaderView,
-    QMessageBox, QSizePolicy, QScrollArea, QInputDialog, QLineEdit
+    QMessageBox, QSizePolicy, QScrollArea, QInputDialog, QLineEdit,
+    QCheckBox
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread
 from PyQt6.QtGui import QIcon, QPixmap, QColor, QFont, QPainter, QPainterPath
@@ -78,14 +79,21 @@ QDialog, QWidget {
 }
 QLabel { background: transparent; }
 QPushButton {
-    background: rgba(212,160,40,0.15);
-    border: 1px solid rgba(212,160,40,0.4);
-    border-radius: 8px;
+    background: rgba(212,160,40,0.12);
+    border: 1px solid rgba(212,160,40,0.38);
+    border-radius: 7px;
     color: #D4A028;
     font-size: 12px;
-    padding: 8px 18px;
+    padding: 7px 14px;
 }
-QPushButton:hover { background: rgba(212,160,40,0.25); }
+QPushButton:hover {
+    background: rgba(212,160,40,0.24);
+    border: 1px solid rgba(212,160,40,0.72);
+    color: #F0BC38;
+}
+QPushButton:pressed {
+    background: rgba(212,160,40,0.30);
+}
 QTableWidget {
     background: rgba(255,255,255,0.025);
     border: 1px solid rgba(255,255,255,0.08);
@@ -128,7 +136,7 @@ class DashboardWindow(QDialog):
 
     def _setup_ui(self):
         self.setWindowTitle("PrayerLock Dashboard")
-        self.setFixedSize(620, 560)
+        self.setFixedSize(760, 620)
         self.setStyleSheet(DASHBOARD_STYLE)
         self.setWindowFlags(
             Qt.WindowType.Window |
@@ -186,7 +194,7 @@ class DashboardWindow(QDialog):
         content.setStyleSheet("background: transparent;")
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(24, 20, 24, 20)
-        content_layout.setSpacing(16)
+        content_layout.setSpacing(12)
 
         cfg = self.config.load()
         city = cfg.get("city", "—")
@@ -225,12 +233,14 @@ class DashboardWindow(QDialog):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(10)
         for label, slot in [
-            ("🔄  Refresh", self._load_data),
-            ("🔒  Test Lock", self._test_lockscreen),
-            ("⏳  Test Overlay", self._test_warning_overlay),
-            ("⚙️  Settings", self._open_settings),
+            ("Test Lock", self._test_lockscreen),
+            ("Test Overlay", self._test_warning_overlay),
+            ("Skip Today", self._skip_today_prayers),
+            ("Settings", self._open_settings),
         ]:
             btn = QPushButton(label)
+            btn.setMinimumHeight(38)
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             btn.clicked.connect(slot)
             btn_row.addWidget(btn)
         content_layout.addLayout(btn_row)
@@ -254,6 +264,10 @@ class DashboardWindow(QDialog):
         self._clock_timer = QTimer(self)
         self._clock_timer.timeout.connect(self._update_datetime)
         self._clock_timer.start(10_000)
+
+        self._dashboard_refresh_timer = QTimer(self)
+        self._dashboard_refresh_timer.timeout.connect(self._load_data)
+        self._dashboard_refresh_timer.start(3_000)
 
     def _make_stat_card(self, icon: str, value: str, label: str) -> QFrame:
         card = QFrame()
@@ -283,8 +297,6 @@ class DashboardWindow(QDialog):
     def _load_data(self):
         """Load today's prayer schedule into the table."""
         try:
-            # Force cache refresh
-            self.scheduler._schedule_cache = None
             schedule = self.scheduler.get_formatted_schedule()
             self.table.setRowCount(len(schedule))
             locked = self.scheduler.should_be_locked()
@@ -294,17 +306,20 @@ class DashboardWindow(QDialog):
 
             for row, prayer in enumerate(schedule):
                 is_active = locked is not None and locked.name == prayer["name"]
+                is_skipped = self._is_skipped_today(prayer["name"])
                 items = [
                     f"{prayer['display_name']}  {prayer.get('arabic_name', '')}",
                     prayer["time"],
                     prayer["lock_at"],
-                    "🔒 Active" if is_active else "—"
+                    "Skipped today" if is_skipped else ("🔒 Active" if is_active else "—")
                 ]
                 for col, text in enumerate(items):
                     item = QTableWidgetItem(text)
                     item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                     if col == 3 and is_active:
                         item.setForeground(QColor("#FF6B6B"))
+                    elif col == 3 and is_skipped:
+                        item.setForeground(QColor("#D4A028"))
                     self.table.setItem(row, col, item)
 
             # Next event
@@ -361,12 +376,111 @@ class DashboardWindow(QDialog):
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Could not launch warning overlay:\n{e}")
 
+    def _skip_today_prayers(self):
+        if self.tray_app is not None:
+            self.tray_app._skip_selected_prayers_today()
+            self._load_data()
+            return
+        QMessageBox.information(self, "PrayerLock", "Open this from the tray app.")
+
+    def _is_skipped_today(self, prayer_name: str) -> bool:
+        try:
+            from lock_state import was_intentionally_unlocked_today
+            return was_intentionally_unlocked_today(prayer_name)
+        except Exception:
+            return False
+
     def _open_settings(self):
         QMessageBox.information(
             self, "Settings",
             "To change settings, please uninstall and reinstall PrayerLock.\n\n"
             "A settings editing panel is planned for a future update."
         )
+
+
+class SkipTodayDialog(QDialog):
+    """Password-protected picker for skipping specific prayers today."""
+
+    def __init__(self, config_manager, scheduler, parent=None):
+        super().__init__(parent)
+        self.config = config_manager
+        self.scheduler = scheduler
+        self.selected_entries = []
+        self._checks = []
+        self._setup_ui()
+
+    def _setup_ui(self):
+        self.setWindowTitle("Skip Prayers Today")
+        self.setFixedSize(420, 420)
+        self.setStyleSheet(DASHBOARD_STYLE)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 20, 22, 20)
+        layout.setSpacing(12)
+
+        title = QLabel("Skip specific prayers today")
+        title.setStyleSheet("color: #D4A028; font-size: 18px; font-weight: bold;")
+        layout.addWidget(title)
+
+        note = QLabel("Selected prayers will not show the overlay or lock screen today.")
+        note.setWordWrap(True)
+        note.setStyleSheet("color: rgba(232,224,208,0.72); font-size: 12px;")
+        layout.addWidget(note)
+
+        now = datetime.datetime.now()
+        for entry in self.scheduler.get_schedule():
+            if entry.unlock_at <= now:
+                continue
+            cb = QCheckBox(
+                f"{entry.display_name}  {entry.prayer_time.strftime('%I:%M %p')} "
+                f"(locks {entry.lock_at.strftime('%I:%M %p')})"
+            )
+            cb.entry = entry
+            cb.setStyleSheet("font-size: 13px;")
+            self._checks.append(cb)
+            layout.addWidget(cb)
+
+        if not self._checks:
+            empty = QLabel("No remaining prayers to skip today.")
+            empty.setStyleSheet("color: rgba(232,224,208,0.7);")
+            layout.addWidget(empty)
+
+        layout.addSpacing(8)
+        layout.addWidget(make_dialog_label("Master password"))
+        self.password_input = QLineEdit()
+        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.password_input.setPlaceholderText("Enter password")
+        layout.addWidget(self.password_input)
+
+        self.error_lbl = QLabel("")
+        self.error_lbl.setStyleSheet("color: #FF6B6B; font-size: 12px;")
+        layout.addWidget(self.error_lbl)
+
+        btn_row = QHBoxLayout()
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        skip_btn = QPushButton("Skip Selected")
+        skip_btn.clicked.connect(self._submit)
+        btn_row.addWidget(cancel_btn)
+        btn_row.addWidget(skip_btn)
+        layout.addStretch()
+        layout.addLayout(btn_row)
+
+    def _submit(self):
+        self.selected_entries = [cb.entry for cb in self._checks if cb.isChecked()]
+        if not self.selected_entries:
+            self.error_lbl.setText("Choose at least one prayer.")
+            return
+        if not self.config.verify_password(self.password_input.text()):
+            self.error_lbl.setText("Incorrect password.")
+            return
+        self.accept()
+
+
+def make_dialog_label(text: str) -> QLabel:
+    lbl = QLabel(text)
+    lbl.setStyleSheet("color: rgba(230,220,200,0.7); font-size: 12px;")
+    return lbl
 
 
 class TrayApplication:
@@ -421,6 +535,8 @@ class TrayApplication:
         test_overlay_action.triggered.connect(self._test_warning_overlay)
         dismiss_action = menu.addAction("Skip Upcoming Overlay/Lock...")
         dismiss_action.triggered.connect(self._dismiss_upcoming_prayer)
+        skip_today_action = menu.addAction("Skip Specific Prayers Today...")
+        skip_today_action.triggered.connect(self._skip_selected_prayers_today)
         menu.addSeparator()
 
         quit_action = menu.addAction("🔐 Quit (Password Required)")
@@ -477,6 +593,11 @@ class TrayApplication:
                 )
         except Exception:
             pass
+        self._refresh_dashboard()
+
+    def _refresh_dashboard(self):
+        if self._dashboard is not None and self._dashboard.isVisible():
+            self._dashboard._load_data()
 
     def _get_service_state(self) -> str:
         """Return RUNNING/STOPPED/etc. for the Windows service."""
@@ -509,11 +630,13 @@ class TrayApplication:
             if active is None:
                 self._active_lock_name = None
                 self._lockscreen_proc = None
+                self._refresh_dashboard()
                 return
 
             if self._is_intentionally_unlocked(active.name):
                 self._active_lock_name = active.name
                 self._lockscreen_proc = None
+                self._refresh_dashboard()
                 return
 
             service_state = self._get_service_state()
@@ -554,6 +677,7 @@ class TrayApplication:
                 service_state,
                 active.display_name,
             )
+            self._refresh_dashboard()
         except Exception as e:
             logger.error(f"Tray lock enforcement failed: {e}", exc_info=True)
 
@@ -570,7 +694,7 @@ class TrayApplication:
 
             seconds_until_athan = (entry.prayer_time - now).total_seconds()
             seconds_until_lock = (entry.lock_at - now).total_seconds()
-            if not (0 < seconds_until_athan <= warning_lead_seconds and seconds_until_lock > 0):
+            if not (seconds_until_athan <= warning_lead_seconds and seconds_until_lock > 0):
                 continue
 
             if (
@@ -696,6 +820,7 @@ class TrayApplication:
             self._lockscreen_proc = None
             self._warning_proc = None
             self._update_next_prayer()
+            self._refresh_dashboard()
             QMessageBox.information(
                 None,
                 "PrayerLock",
@@ -703,6 +828,39 @@ class TrayApplication:
             )
         except Exception as e:
             QMessageBox.warning(None, "PrayerLock", f"Could not skip prayer:\n{e}")
+
+    def _skip_selected_prayers_today(self):
+        dialog = SkipTodayDialog(self.config, self._scheduler)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        try:
+            from lock_state import mark_intentionally_unlocked
+
+            now = datetime.datetime.now()
+            skipped = []
+            selected_names = {entry.name for entry in dialog.selected_entries}
+            for entry in dialog.selected_entries:
+                suppress_seconds = max(1, int((entry.unlock_at - now).total_seconds()))
+                mark_intentionally_unlocked(entry.name, suppress_seconds)
+                skipped.append(entry.display_name)
+
+            if self._warning_name in selected_names:
+                self._terminate_process(self._warning_proc)
+                self._warning_proc = None
+            if self._active_lock_name in selected_names:
+                self._lockscreen_proc = None
+
+            self._update_next_prayer()
+            self._refresh_dashboard()
+
+            QMessageBox.information(
+                None,
+                "PrayerLock",
+                f"Skipped today: {', '.join(skipped)}",
+            )
+        except Exception as e:
+            QMessageBox.warning(None, "PrayerLock", f"Could not skip prayers:\n{e}")
 
     def _get_dismiss_target(self):
         now = datetime.datetime.now()

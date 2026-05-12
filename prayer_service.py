@@ -416,7 +416,8 @@ class _SchedulerLoop:
             warning_lead_seconds = self._get_overlay_lead_seconds()
             if (
                 self._service_overlay_enabled()
-                and 0 < seconds_until_athan <= warning_lead_seconds
+                and warning_lead_seconds > 0
+                and seconds_until_athan <= warning_lead_seconds
                 and seconds_until_lock > 0
                 and not self._is_intentionally_unlocked(name, now)
             ):

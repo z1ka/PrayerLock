@@ -19,6 +19,8 @@ import argparse
 import ctypes
 import subprocess
 
+_SINGLE_INSTANCE_HANDLES = []
+
 if sys.stdout is None:
     sys.stdout = open(os.devnull, "w")
 if sys.stderr is None:
@@ -54,6 +56,8 @@ def parse_args():
     parser.add_argument("--uninstall-service", action="store_true", help="Uninstall Windows service")
     parser.add_argument("--start-service",     action="store_true", help="Start Windows service")
     parser.add_argument("--stop-service",      action="store_true", help="Stop Windows service")
+    parser.add_argument("--verify-password-file", type=str, default="",
+                        help="Verify master password from a file and exit")
     args, unknown = parser.parse_known_args()
     if unknown:
         try:
@@ -95,6 +99,58 @@ def relaunch_as_admin() -> bool:
     return result > 32
 
 
+def cleanup_legacy_user_startup():
+    """Remove the old per-user startup entry that duplicated the installer entry."""
+    if os.name != "nt":
+        return
+    try:
+        import winreg
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run",
+            0,
+            winreg.KEY_SET_VALUE,
+        )
+        try:
+            winreg.DeleteValue(key, "PrayerLock")
+        except FileNotFoundError:
+            pass
+        winreg.CloseKey(key)
+    except Exception:
+        pass
+
+
+def acquire_instance_lock(name: str) -> bool:
+    """Return False if another process already owns this app-level lock."""
+    if os.name != "nt":
+        return True
+    try:
+        handle = ctypes.windll.kernel32.CreateMutexW(
+            None,
+            False,
+            name,
+        )
+        if not handle:
+            return True
+        if ctypes.windll.kernel32.GetLastError() == 183:
+            ctypes.windll.kernel32.CloseHandle(handle)
+            return False
+        _SINGLE_INSTANCE_HANDLES.append(handle)
+        return True
+    except Exception:
+        return True
+
+
+def acquire_tray_instance_lock() -> bool:
+    """Return False if the tray/dashboard process is already running."""
+    return acquire_instance_lock("Local\\PrayerLockTrayInstance")
+
+
+def acquire_lockscreen_instance_lock() -> bool:
+    """Return False if a lockscreen is already covering this desktop session."""
+    return acquire_instance_lock("Local\\PrayerLockLockscreenInstance")
+
+
 def launch_setup_or_tray(config):
     """Show setup wizard on first run, otherwise go straight to tray."""
     from PyQt6.QtWidgets import QApplication
@@ -115,6 +171,9 @@ def launch_setup_or_tray(config):
         wizard = SetupWizard(config)
         wizard.show()
     else:
+        cleanup_legacy_user_startup()
+        if not acquire_tray_instance_lock():
+            sys.exit(0)
         from tray_app import TrayApplication
         tray = TrayApplication(config)
         # Keep reference alive on app object so GC doesn't collect it
@@ -126,6 +185,10 @@ def launch_setup_or_tray(config):
 def launch_tray(config):
     """Launch only the tray app (used at Windows startup)."""
     from PyQt6.QtWidgets import QApplication
+
+    cleanup_legacy_user_startup()
+    if not acquire_tray_instance_lock():
+        sys.exit(0)
 
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
@@ -147,6 +210,9 @@ def launch_lockscreen(prayer_name: str, duration_seconds: int, config):
     """Launch the fullscreen lock screen."""
     from PyQt6.QtWidgets import QApplication
 
+    if not acquire_lockscreen_instance_lock():
+        sys.exit(0)
+
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     try:
@@ -160,7 +226,7 @@ def launch_lockscreen(prayer_name: str, duration_seconds: int, config):
         prayer_name=prayer_name,
         duration=duration_seconds,   # ← parameter is `duration`, not `duration_seconds`
     )
-    window.showFullScreen()
+    app._lockscreen_window = window  # keep the top-level widget alive
 
     sys.exit(app.exec())
 
@@ -277,6 +343,16 @@ def main():
     except Exception as e:
         print(f"Failed to initialise ConfigManager: {e}")
         config = None
+
+    if args.verify_password_file:
+        if config is None:
+            sys.exit(1)
+        try:
+            with open(args.verify_password_file, "r", encoding="utf-8") as f:
+                password = f.read()
+            sys.exit(0 if config.verify_password(password) else 1)
+        except Exception:
+            sys.exit(1)
 
     # ── Route to the correct mode ─────────────────────────────────────────────
 

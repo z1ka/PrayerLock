@@ -10,7 +10,7 @@ import requests
 from PyQt6.QtWidgets import (
     QWidget, QWizard, QWizardPage, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QComboBox, QCheckBox,
-    QSpinBox, QFrame, QApplication, QSizePolicy, QDoubleSpinBox,
+    QSpinBox, QFrame, QApplication, QSizePolicy,
     QMessageBox, QProgressBar
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread
@@ -20,6 +20,8 @@ from PyQt6.QtGui import QFont, QPixmap, QPalette, QColor, QIcon
 ROOT = os.path.dirname(os.path.abspath(__file__))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
+
+DROPDOWN_ARROW_PATH = os.path.join(ROOT, "assets", "dropdown_arrow.svg").replace("\\", "/")
 
 
 DARK_STYLE = """
@@ -65,22 +67,40 @@ QLineEdit:focus {
     background: rgba(255,255,255,0.09);
 }
 QComboBox {
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(212,160,40,0.3);
+    background: rgba(255,255,255,0.075);
+    border: 1px solid rgba(212,160,40,0.55);
     border-radius: 10px;
     color: white;
     font-size: 13px;
-    padding: 9px 14px;
+    padding: 9px 46px 9px 14px;
     min-height: 36px;
 }
-QComboBox::drop-down { border: none; width: 24px; }
+QComboBox:hover {
+    background: rgba(255,255,255,0.10);
+    border: 1px solid rgba(212,160,40,0.85);
+}
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 38px;
+    border-left: 1px solid rgba(212,160,40,0.45);
+    border-top-right-radius: 9px;
+    border-bottom-right-radius: 9px;
+    background: rgba(212,160,40,0.28);
+}
+QComboBox::down-arrow {
+    image: url("__DROPDOWN_ARROW_PATH__");
+    width: 12px;
+    height: 8px;
+    margin-right: 13px;
+}
 QComboBox QAbstractItemView {
     background: #1A2540;
     border: 1px solid rgba(212,160,40,0.3);
     color: white;
     selection-background-color: rgba(212,160,40,0.3);
 }
-QSpinBox, QDoubleSpinBox {
+QSpinBox {
     background: rgba(255,255,255,0.06);
     border: 1px solid rgba(212,160,40,0.3);
     border-radius: 10px;
@@ -104,27 +124,19 @@ QCheckBox::indicator:checked {
     border-color: #D4A028;
 }
 QLabel { color: #E8E0D0; background: transparent; }
-"""
+""".replace("__DROPDOWN_ARROW_PATH__", DROPDOWN_ARROW_PATH)
 
 
 TIMEZONES = [
-    "Asia/Riyadh", "Asia/Mecca", "Asia/Dubai", "Asia/Karachi",
-    "Asia/Dhaka", "Asia/Kolkata", "Asia/Jakarta", "Asia/Kuala_Lumpur",
-    "Asia/Baghdad", "Asia/Tehran",
+    "Asia/Riyadh", "Asia/Mecca", "Asia/Dubai", "Asia/Qatar",
+    "Asia/Kuwait", "Asia/Bahrain", "Asia/Muscat", "Asia/Aden",
+    "Asia/Amman", "Asia/Jerusalem", "Asia/Beirut", "Asia/Damascus",
+    "Asia/Karachi", "Asia/Dhaka", "Asia/Kolkata", "Asia/Jakarta",
+    "Asia/Kuala_Lumpur", "Asia/Baghdad", "Asia/Tehran",
     "Africa/Cairo", "Africa/Tunis", "Africa/Algiers", "Africa/Casablanca",
     "Africa/Khartoum", "Africa/Nairobi", "Africa/Dakar",
     "Europe/Istanbul", "Europe/London", "America/New_York", "America/Chicago",
     "America/Los_Angeles", "America/Toronto", "Australia/Sydney",
-]
-
-CITIES = [
-    "Mecca", "Medina", "Riyadh", "Jeddah", "Dammam", "Khobar", "Dhahran",
-    "Taif", "Tabuk", "Abha", "Khamis Mushait", "Buraidah", "Hail",
-    "Jazan", "Najran", "Yanbu", "Al Jubail", "Al Ahsa", "Cairo", "Dubai", "Istanbul",
-    "Karachi", "Lahore", "Dhaka", "Jakarta", "Kuala Lumpur", "London",
-    "New York", "Chicago", "Los Angeles", "Toronto", "Sydney",
-    "Islamabad", "Baghdad", "Tehran", "Ankara", "Casablanca", "Tunis",
-    "Algiers", "Khartoum", "Nairobi", "Dakar",
 ]
 
 CITY_COORDS = {
@@ -174,10 +186,184 @@ CITY_TIMEZONES.update({
     "Nairobi": "Africa/Nairobi", "Dakar": "Africa/Dakar",
 })
 
+COUNTRIES = {
+    "SA": "Saudi Arabia",
+    "EG": "Egypt",
+    "AE": "United Arab Emirates",
+    "QA": "Qatar",
+    "KW": "Kuwait",
+    "BH": "Bahrain",
+    "OM": "Oman",
+    "YE": "Yemen",
+    "JO": "Jordan",
+    "PS": "Palestine",
+    "LB": "Lebanon",
+    "SY": "Syria",
+    "TR": "Turkey",
+    "PK": "Pakistan",
+    "BD": "Bangladesh",
+    "ID": "Indonesia",
+    "MY": "Malaysia",
+    "GB": "United Kingdom",
+    "US": "United States",
+    "CA": "Canada",
+    "AU": "Australia",
+    "IQ": "Iraq",
+    "IR": "Iran",
+    "MA": "Morocco",
+    "TN": "Tunisia",
+    "DZ": "Algeria",
+    "SD": "Sudan",
+    "KE": "Kenya",
+    "SN": "Senegal",
+}
+
+CITY_COUNTRIES = {
+    city: "SA"
+    for city in [
+        "Mecca", "Medina", "Riyadh", "Jeddah", "Dammam", "Khobar",
+        "Dhahran", "Taif", "Tabuk", "Abha", "Khamis Mushait", "Buraidah",
+        "Hail", "Jazan", "Najran", "Yanbu", "Al Jubail", "Al Ahsa",
+    ]
+}
+CITY_COUNTRIES.update({
+    "Cairo": "EG", "Dubai": "AE", "Istanbul": "TR", "Ankara": "TR",
+    "Karachi": "PK", "Lahore": "PK", "Islamabad": "PK",
+    "Dhaka": "BD", "Jakarta": "ID", "Kuala Lumpur": "MY",
+    "London": "GB", "New York": "US", "Chicago": "US",
+    "Los Angeles": "US", "Toronto": "CA", "Sydney": "AU",
+    "Baghdad": "IQ", "Tehran": "IR", "Casablanca": "MA",
+    "Tunis": "TN", "Algiers": "DZ", "Khartoum": "SD",
+    "Nairobi": "KE", "Dakar": "SN",
+})
+
+COUNTRY_CODES_BY_NAME = {name: code for code, name in COUNTRIES.items()}
+
+EXTRA_CITY_DATA = {
+    "United Arab Emirates": {
+        "Abu Dhabi": (24.4539, 54.3773), "Sharjah": (25.3463, 55.4209),
+        "Ajman": (25.4052, 55.5136), "Ras Al Khaimah": (25.8007, 55.9762),
+        "Fujairah": (25.1288, 56.3265), "Al Ain": (24.1302, 55.8023),
+    },
+    "Qatar": {
+        "Doha": (25.2854, 51.5310), "Al Rayyan": (25.2919, 51.4244),
+        "Al Wakrah": (25.1659, 51.5976), "Al Khor": (25.6804, 51.4969),
+        "Umm Salal": (25.4152, 51.4065),
+    },
+    "Kuwait": {
+        "Kuwait City": (29.3759, 47.9774), "Hawalli": (29.3328, 48.0286),
+        "Farwaniya": (29.2775, 47.9586), "Salmiya": (29.3339, 48.0761),
+        "Jahra": (29.3375, 47.6581), "Ahmadi": (29.0769, 48.0838),
+    },
+    "Bahrain": {
+        "Manama": (26.2235, 50.5876), "Muharraq": (26.2572, 50.6119),
+        "Riffa": (26.1290, 50.5550), "Hamad Town": (26.1153, 50.5069),
+        "Isa Town": (26.1736, 50.5478),
+    },
+    "Oman": {
+        "Muscat": (23.5880, 58.3829), "Salalah": (17.0194, 54.1108),
+        "Sohar": (24.3475, 56.7094), "Nizwa": (22.9333, 57.5333),
+        "Sur": (22.5667, 59.5289), "Ibri": (23.2257, 56.5157),
+    },
+    "Yemen": {
+        "Sana'a": (15.3694, 44.1910), "Aden": (12.7855, 45.0187),
+        "Taiz": (13.5795, 44.0209), "Hodeidah": (14.7978, 42.9545),
+        "Mukalla": (14.5425, 49.1242), "Ibb": (13.9667, 44.1833),
+    },
+    "Jordan": {
+        "Amman": (31.9539, 35.9106), "Zarqa": (32.0728, 36.0870),
+        "Irbid": (32.5556, 35.8500), "Aqaba": (29.5321, 35.0063),
+        "Madaba": (31.7167, 35.8000), "Salt": (32.0392, 35.7272),
+    },
+    "Palestine": {
+        "Jerusalem": (31.7683, 35.2137), "Gaza": (31.5017, 34.4668),
+        "Hebron": (31.5326, 35.0998), "Nablus": (32.2211, 35.2544),
+        "Ramallah": (31.9038, 35.2034), "Jenin": (32.4594, 35.3009),
+    },
+    "Lebanon": {
+        "Beirut": (33.8938, 35.5018), "Tripoli": (34.4367, 35.8497),
+        "Sidon": (33.5630, 35.3688), "Tyre": (33.2700, 35.2033),
+        "Zahle": (33.8468, 35.9020),
+    },
+    "Syria": {
+        "Damascus": (33.5138, 36.2765), "Aleppo": (36.2021, 37.1343),
+        "Homs": (34.7324, 36.7137), "Hama": (35.1318, 36.7578),
+        "Latakia": (35.5317, 35.7901), "Deir ez-Zor": (35.3359, 40.1408),
+    },
+    "Iraq": {
+        "Basra": (30.5085, 47.7804), "Mosul": (36.3489, 43.1577),
+        "Erbil": (36.1911, 44.0092), "Najaf": (32.0000, 44.3333),
+        "Karbala": (32.6160, 44.0249), "Sulaymaniyah": (35.5570, 45.4350),
+    },
+    "Iran": {
+        "Mashhad": (36.2605, 59.6168), "Isfahan": (32.6546, 51.6680),
+        "Shiraz": (29.5918, 52.5837), "Tabriz": (38.0962, 46.2738),
+        "Qom": (34.6416, 50.8746), "Ahvaz": (31.3183, 48.6706),
+    },
+    "Turkey": {
+        "Konya": (37.8746, 32.4932), "Bursa": (40.1828, 29.0663),
+        "Izmir": (38.4237, 27.1428), "Gaziantep": (37.0662, 37.3833),
+    },
+    "Egypt": {
+        "Alexandria": (31.2001, 29.9187), "Giza": (30.0131, 31.2089),
+        "Mansoura": (31.0409, 31.3785), "Aswan": (24.0889, 32.8998),
+        "Luxor": (25.6872, 32.6396), "Suez": (29.9668, 32.5498),
+    },
+}
+
+for _country_name, _cities in EXTRA_CITY_DATA.items():
+    _country_code = COUNTRY_CODES_BY_NAME[_country_name]
+    for _city, _coords in _cities.items():
+        CITY_COORDS[_city] = _coords
+        CITY_COUNTRIES[_city] = _country_code
+        CITY_TIMEZONES[_city] = {
+            "United Arab Emirates": "Asia/Dubai",
+            "Qatar": "Asia/Qatar",
+            "Kuwait": "Asia/Kuwait",
+            "Bahrain": "Asia/Bahrain",
+            "Oman": "Asia/Muscat",
+            "Yemen": "Asia/Aden",
+            "Jordan": "Asia/Amman",
+            "Palestine": "Asia/Jerusalem",
+            "Lebanon": "Asia/Beirut",
+            "Syria": "Asia/Damascus",
+            "Iraq": "Asia/Baghdad",
+            "Iran": "Asia/Tehran",
+            "Turkey": "Europe/Istanbul",
+            "Egypt": "Africa/Cairo",
+        }[_country_name]
+
+COUNTRY_CODES_BY_NAME = {name: code for code, name in COUNTRIES.items()}
+COUNTRY_CITIES = {}
+for _city, _country_code in CITY_COUNTRIES.items():
+    COUNTRY_CITIES.setdefault(_country_code, []).append(_city)
+for _city_list in COUNTRY_CITIES.values():
+    _city_list.sort()
+
 CALC_METHODS = [
     "UmmAlQura", "MWL", "ISNA", "Egypt", "Karachi",
     "Gulf", "Kuwait", "Qatar", "Singapore", "Turkey",
 ]
+
+COUNTRY_METHODS = {
+    "SA": "UmmAlQura",
+    "AE": "Gulf",
+    "QA": "Qatar",
+    "KW": "Kuwait",
+    "BH": "Gulf",
+    "OM": "Gulf",
+    "YE": "UmmAlQura",
+    "EG": "Egypt",
+    "TR": "Turkey",
+    "PK": "Karachi",
+    "BD": "Karachi",
+    "JO": "MWL",
+    "PS": "MWL",
+    "LB": "MWL",
+    "SY": "MWL",
+    "IQ": "MWL",
+    "IR": "MWL",
+}
 
 
 def make_field_label(text: str) -> QLabel:
@@ -251,52 +437,58 @@ class LocationPage(QWizardPage):
         layout.setSpacing(12)
         layout.setContentsMargins(30, 10, 30, 10)
 
+        note = QLabel(
+            "Choose your country and city. PrayerLock uses the selected city "
+            "to calculate prayer times and timezone automatically."
+        )
+        note.setWordWrap(True)
+        note.setStyleSheet("""
+            background: rgba(212,160,40,0.08);
+            border: 1px solid rgba(212,160,40,0.18);
+            border-radius: 10px;
+            color: rgba(230,220,200,0.82);
+            font-size: 12px;
+            padding: 10px 12px;
+        """)
+        layout.addWidget(note)
+
         detect_row = QHBoxLayout()
-        self.detect_btn = QPushButton("Detect location automatically")
+        self.detect_btn = QPushButton("Auto-select location")
         self.detect_btn.clicked.connect(self._detect_location)
-        self.detect_status = QLabel("City sets coordinates and timezone automatically.")
+        self.detect_status = QLabel("Uses network location as a starting point. You can change it if it is wrong.")
         self.detect_status.setWordWrap(True)
-        self.detect_status.setStyleSheet("color: rgba(230,220,200,0.6); font-size: 11px;")
+        self.detect_status.setStyleSheet("color: rgba(230,220,200,0.58); font-size: 11px;")
         detect_row.addWidget(self.detect_btn)
         detect_row.addWidget(self.detect_status, 1)
         layout.addLayout(detect_row)
 
+        layout.addWidget(make_field_label("Country"))
+        self.country_combo = QComboBox()
+        self.country_combo.setEditable(True)
+        self.country_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.country_combo.addItems(
+            sorted(COUNTRIES.values(), key=lambda name: (name != "Saudi Arabia", name))
+        )
+        self.country_combo.setCurrentText("Saudi Arabia")
+        self.country_combo.currentTextChanged.connect(self._country_changed)
+        layout.addWidget(self.country_combo)
+
         layout.addWidget(make_field_label("City"))
         self.city_combo = QComboBox()
         self.city_combo.setEditable(True)
-        self.city_combo.addItems(sorted(CITIES))
+        self.city_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.city_combo.setCurrentText("Mecca")
         self.city_combo.currentTextChanged.connect(self._city_changed)
         layout.addWidget(self.city_combo)
 
-        timezone_note = QLabel("Timezone is filled automatically from the selected city.")
-        timezone_note.setWordWrap(True)
-        timezone_note.setStyleSheet("color: rgba(230,220,200,0.55); font-size: 11px;")
-        layout.addWidget(timezone_note)
+        self.location_status = QLabel("")
+        self.location_status.setWordWrap(True)
+        self.location_status.setStyleSheet("color: rgba(230,220,200,0.58); font-size: 11px;")
+        layout.addWidget(self.location_status)
+
         self.tz_combo = QComboBox()
         self.tz_combo.addItems(TIMEZONES)
         self.tz_combo.setCurrentText("Asia/Riyadh")
-
-        coords_row = QHBoxLayout()
-        lat_col = QVBoxLayout()
-        lat_col.addWidget(make_field_label("Latitude"))
-        self.lat_spin = QDoubleSpinBox()
-        self.lat_spin.setRange(-90, 90)
-        self.lat_spin.setDecimals(4)
-        self.lat_spin.setValue(21.3891)
-        lat_col.addWidget(self.lat_spin)
-
-        lng_col = QVBoxLayout()
-        lng_col.addWidget(make_field_label("Longitude"))
-        self.lng_spin = QDoubleSpinBox()
-        self.lng_spin.setRange(-180, 180)
-        self.lng_spin.setDecimals(4)
-        self.lng_spin.setValue(39.8579)
-        lng_col.addWidget(self.lng_spin)
-
-        coords_row.addLayout(lat_col)
-        coords_row.addLayout(lng_col)
-        layout.addLayout(coords_row)
 
         layout.addWidget(make_field_label("Calculation Method"))
         self.method_combo = QComboBox()
@@ -310,22 +502,51 @@ class LocationPage(QWizardPage):
         self.registerField("timezone", self.tz_combo, "currentText")
         self.registerField("calcMethod", self.method_combo, "currentText")
 
+        self._country_changed("Saudi Arabia")
+        self._city_changed("Mecca")
         QTimer.singleShot(250, self._detect_location)
 
+    def _country_changed(self, country_name: str):
+        country_code = COUNTRY_CODES_BY_NAME.get(country_name, "SA")
+        self.country_code = country_code
+        cities = COUNTRY_CITIES.get(country_code, COUNTRY_CITIES["SA"])
+        self.method_combo.setCurrentText(COUNTRY_METHODS.get(country_code, "MWL"))
+
+        current = self.city_combo.currentText()
+        self.city_combo.blockSignals(True)
+        self.city_combo.clear()
+        self.city_combo.addItems(cities)
+        if current in cities:
+            self.city_combo.setCurrentText(current)
+        elif country_code == "SA" and "Mecca" in cities:
+            self.city_combo.setCurrentText("Mecca")
+        elif cities:
+            self.city_combo.setCurrentText(cities[0])
+        self.city_combo.blockSignals(False)
+        self._city_changed(self.city_combo.currentText())
+
     def _city_changed(self, city: str):
-        if city in CITY_COORDS:
-            lat, lng = CITY_COORDS[city]
-            self.lat_spin.setValue(lat)
-            self.lng_spin.setValue(lng)
+        country_code = CITY_COUNTRIES.get(city, self.country_code)
+        self.country_code = country_code
+        country_name = COUNTRIES.get(country_code, country_code)
+        if self.country_combo.currentText() != country_name:
+            self.country_combo.blockSignals(True)
+            self.country_combo.setCurrentText(country_name)
+            self.country_combo.blockSignals(False)
         if city in CITY_TIMEZONES:
             self.tz_combo.setCurrentText(CITY_TIMEZONES[city])
+        if city in CITY_COORDS:
+            lat, lng = CITY_COORDS[city]
+            self.location_status.setText(
+                f"{city}, {country_name} selected. Timezone: {self.tz_combo.currentText()}."
+            )
 
     def _detect_location(self):
         self.detect_status.setText("Detecting...")
         QApplication.processEvents()
         try:
             resp = requests.get(
-                "http://ip-api.com/json/?fields=status,message,city,country,countryCode,lat,lon,timezone",
+                "http://ip-api.com/json/?fields=status,message,city,countryCode",
                 timeout=5,
             )
             resp.raise_for_status()
@@ -333,25 +554,47 @@ class LocationPage(QWizardPage):
             if data.get("status") != "success":
                 raise RuntimeError(data.get("message", "location lookup failed"))
 
-            city = data.get("city") or "Detected location"
-            self.country_code = data.get("countryCode") or ""
-            timezone = data.get("timezone") or "Asia/Riyadh"
-            lat = float(data.get("lat"))
-            lon = float(data.get("lon"))
+            country_code = data.get("countryCode") or "SA"
+            city = data.get("city") or ""
+            country_name = COUNTRIES.get(country_code)
+            if country_name:
+                self.country_combo.setCurrentText(country_name)
 
-            if self.city_combo.findText(city) < 0:
-                self.city_combo.addItem(city)
-            self.city_combo.setCurrentText(city)
-            self.lat_spin.setValue(lat)
-            self.lng_spin.setValue(lon)
-            if self.tz_combo.findText(timezone) < 0:
-                self.tz_combo.addItem(timezone)
-            self.tz_combo.setCurrentText(timezone)
-            self.detect_status.setText(f"Detected {city}.")
-        except Exception as e:
-            self.detect_status.setText(
-                f"Auto-detect unavailable. Choose your city manually. ({e})"
+            city_lookup = {name.lower(): name for name in CITY_COUNTRIES}
+            matched_city = city_lookup.get(city.lower())
+            if matched_city and CITY_COUNTRIES.get(matched_city) == country_code:
+                self.city_combo.setCurrentText(matched_city)
+                self.detect_status.setText(f"Auto-selected {matched_city}. Change it if needed.")
+            elif country_name:
+                self.detect_status.setText(
+                    f"Auto-selected {country_name}. Choose your city if this is not exact."
+                )
+            else:
+                self.detect_status.setText("Could not match your country. Choose it manually.")
+        except Exception:
+            self.detect_status.setText("Auto-select unavailable. Choose country and city manually.")
+
+    def validatePage(self):
+        city = self.city_combo.currentText()
+        if city not in CITY_COORDS:
+            QMessageBox.warning(
+                self,
+                "Location Required",
+                "Please choose a city from the list.",
             )
+            return False
+        return True
+
+    def selected_location(self):
+        city = self.city_combo.currentText()
+        lat, lng = CITY_COORDS[city]
+        return {
+            "city": city,
+            "country": CITY_COUNTRIES.get(city, self.country_code),
+            "timezone": CITY_TIMEZONES.get(city, self.tz_combo.currentText()),
+            "latitude": lat,
+            "longitude": lng,
+        }
 
 
 class PasswordPage(QWizardPage):
@@ -640,18 +883,16 @@ class SetupWizard(QWizard):
         try:
             # First, gather the password and main configuration data
             pwd = self._password.get_password()
-            city = self._location.city_combo.currentText()
-            lat  = self._location.lat_spin.value()
-            lng  = self._location.lng_spin.value()
+            location = self._location.selected_location()
 
             # Build and save the main configuration dictionary
             # Note: We save this FIRST because save() may overwrite the file
             cfg = {
-                "city":                 city,
-                "country":              self._location.country_code,
-                "timezone":             self._location.tz_combo.currentText(),
-                "latitude":             lat,
-                "longitude":            lng,
+                "city":                 location["city"],
+                "country":              location["country"],
+                "timezone":             location["timezone"],
+                "latitude":             location["latitude"],
+                "longitude":            location["longitude"],
                 "calculation_method":   self._location.method_combo.currentText(),
                 "lock_delay_minutes":   self._timing.delay_spin.value(),
                 "overlay_warning_minutes": self._timing.overlay_spin.value(),
@@ -692,6 +933,9 @@ class SetupWizard(QWizard):
 
     def _add_to_startup(self):
         """Add PrayerLock tray app to Windows startup registry."""
+        if getattr(sys, "frozen", False):
+            self._remove_per_user_startup()
+            return
         try:
             import winreg
             # In a flat installation the executable / script is in ROOT
@@ -710,6 +954,23 @@ class SetupWizard(QWizard):
             winreg.CloseKey(key)
         except Exception:
             pass  # Non-fatal: user can enable startup manually
+
+    def _remove_per_user_startup(self):
+        try:
+            import winreg
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run",
+                0,
+                winreg.KEY_SET_VALUE,
+            )
+            try:
+                winreg.DeleteValue(key, "PrayerLock")
+            except FileNotFoundError:
+                pass
+            winreg.CloseKey(key)
+        except Exception:
+            pass
 
     def _install_and_start_service(self):
         if os.name != "nt":

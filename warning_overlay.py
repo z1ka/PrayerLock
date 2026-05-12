@@ -164,19 +164,12 @@ class WarningOverlayWindow(QDialog):
             hwnd = int(self.winId())
             ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
             ex_style |= (
-                win32con.WS_EX_LAYERED
-                | win32con.WS_EX_TRANSPARENT
+                win32con.WS_EX_TRANSPARENT
                 | win32con.WS_EX_TOOLWINDOW
                 | win32con.WS_EX_TOPMOST
                 | win32con.WS_EX_NOACTIVATE
             )
             win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex_style)
-            win32gui.SetLayeredWindowAttributes(
-                hwnd,
-                0,
-                235,
-                win32con.LWA_ALPHA,
-            )
             win32gui.SetWindowPos(
                 hwnd,
                 win32con.HWND_TOPMOST,
@@ -231,6 +224,8 @@ class WarningOverlayWindow(QDialog):
         self._lock_label.setText(
             f"\u0627\u0644\u0642\u0641\u0644 \u0628\u0639\u062f: {self._format_seconds(self.lock_remaining)}"
         )
+        self._athan_label.repaint()
+        self._lock_label.repaint()
 
     def closeEvent(self, event):
         _trace(f"closeEvent dismissed={self._dismissed}")

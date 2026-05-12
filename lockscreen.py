@@ -84,9 +84,6 @@ class IslamicPatternWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._tick = 0
-        self._timer = QTimer(self)
-        self._timer.timeout.connect(self._animate)
-        self._timer.start(50)  # 20 fps for background
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
     def _animate(self):
@@ -205,7 +202,7 @@ class CountdownRing(QWidget):
 
         self._pulse_timer = QTimer(self)
         self._pulse_timer.timeout.connect(self._pulse)
-        self._pulse_timer.start(50)
+        self._pulse_timer.start(250)
 
     def _pulse(self):
         self._tick += 1
@@ -465,8 +462,8 @@ class LockScreenWindow(QWidget):
         self._setup_window()
         self._setup_ui()
 
-        # Show fullscreen AFTER UI is built so background widget paints correctly
-        self.showFullScreen()
+        # Show after UI is built so the borderless window can span every monitor.
+        self.show()
         self._hide_taskbar()
         self._raise_to_top()
 
@@ -488,6 +485,7 @@ class LockScreenWindow(QWidget):
         self.setWindowFlags(
             Qt.WindowType.Window |
             Qt.WindowType.WindowStaysOnTopHint |
+            Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.Tool |
             Qt.WindowType.CustomizeWindowHint
         )
@@ -495,17 +493,25 @@ class LockScreenWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
 
         # Cover all monitors — set geometry now so child widgets know their size
-        app = QApplication.instance()
-        if app:
-            screens = app.screens()
-            if screens:
-                total_geo = screens[0].geometry()
-                for screen in screens[1:]:
-                    total_geo = total_geo.united(screen.geometry())
-                self.setGeometry(total_geo)
+        self.setGeometry(self._desktop_geometry())
 
-        # showFullScreen() is called AFTER _setup_ui() in __init__
-        # so that child widgets are already built when the window first paints.
+    def _desktop_geometry(self) -> QRect:
+        app = QApplication.instance()
+        if not app or not app.screens():
+            screen = QApplication.primaryScreen()
+            geo = screen.geometry() if screen else QRect(0, 0, 1024, 768)
+            return geo.adjusted(-8, -8, 8, 8)
+
+        total_geo = app.screens()[0].geometry()
+        for screen in app.screens()[1:]:
+            total_geo = total_geo.united(screen.geometry())
+        return total_geo.adjusted(-8, -8, 8, 8)
+
+    def _primary_screen_rect(self) -> QRect:
+        screen = QApplication.primaryScreen()
+        screen_geo = screen.geometry() if screen else self._desktop_geometry()
+        offset = screen_geo.topLeft() - self.geometry().topLeft()
+        return QRect(offset, screen_geo.size())
 
     def _hide_taskbar(self):
         """Hide the Windows taskbar."""
@@ -779,9 +785,13 @@ class LockScreenWindow(QWidget):
             self._ensure_fullscreen()
 
     def _ensure_fullscreen(self):
-        """Make sure we're still fullscreen."""
-        if not self.isFullScreen():
-            self.showFullScreen()
+        """Make sure the lock window still covers every connected screen."""
+        target = self._desktop_geometry()
+        if self.geometry() != target:
+            self.setGeometry(target)
+        if not self.isVisible():
+            self.show()
+        self.raise_()
 
     # ── Countdown logic ───────────────────────────────────────────────────────
 
@@ -818,6 +828,7 @@ class LockScreenWindow(QWidget):
         anim.setStartValue(0.0)
         anim.setEndValue(1.0)
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        anim.finished.connect(lambda: self.setGraphicsEffect(None))
         anim.start()
         self._fade_anim = anim  # prevent GC
 
@@ -885,6 +896,8 @@ class LockScreenWindow(QWidget):
             pass
 
         # Fade out then close + quit the Qt event loop
+        self._opacity_effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self._opacity_effect)
         anim = QPropertyAnimation(self._opacity_effect, b"opacity")
         anim.setDuration(600)
         anim.setStartValue(1.0)
@@ -905,11 +918,11 @@ class LockScreenWindow(QWidget):
         if hasattr(self, '_bg'):
             self._bg.setGeometry(geo)
         if hasattr(self, '_content'):
-            self._content.setGeometry(geo)
+            self._content.setGeometry(self._primary_screen_rect())
         if hasattr(self, '_pwd_overlay'):
             self._pwd_overlay.setGeometry(geo)
             if hasattr(self, '_pwd_widget'):
-                self._pwd_widget.setGeometry(geo)
+                self._pwd_widget.setGeometry(self._primary_screen_rect())
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -964,5 +977,6 @@ class LockScreenWindow(QWidget):
         from PyQt6.QtCore import QEvent
         if event.type() == QEvent.Type.WindowStateChange:
             if self.isMinimized() and not self._unlocked:
-                self.showFullScreen()
+                self.show()
+                self.setGeometry(self._desktop_geometry())
         super().changeEvent(event)
